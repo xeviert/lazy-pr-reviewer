@@ -1,0 +1,5 @@
+node_modules/
+eval/out/
+*.log
+eval/cases.json
+eval/expected/*.md

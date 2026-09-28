@@ -1,0 +1,35 @@
+name: Lazy PR Reviewer
+description: Explains what a pull request changes and how the pieces connect. Doesn't judge, approve, or block.
+branding:
+  icon: book-open
+  color: blue
+
+inputs:
+  anthropic-api-key:
+    description: Anthropic API key. When empty (fork and Dependabot PRs), the action skips with a notice.
+    required: false
+  github-token:
+    description: Token used to create the check run. Needs `checks: write`.
+    default: ${{ github.token }}
+  model:
+    description: Claude model ID.
+    default: claude-opus-5
+  effort:
+    description: "Model effort: low, medium, high, xhigh, or max."
+    default: high
+  max-tokens:
+    description: Output token cap for the model call.
+    default: "32000"
+  max-diff-chars:
+    description: Diff characters sent to the model. Files past this budget are listed as not explained.
+    default: "300000"
+  exclude:
+    description: Extra glob patterns to skip, one per line. Lockfiles, build output, and vendored paths are skipped by default.
+    default: ""
+  working-directory:
+    description: Path to the checked-out repository.
+    default: "."
+
+runs:
+  using: node24
+  main: dist/index.mjs
