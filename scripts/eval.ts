@@ -1,5 +1,5 @@
 // Runs every case in eval/cases.json and writes eval/out/<id>.md for comparison with eval/expected/<id>.md.
-//   npm run eval [-- --only <id>] [--model claude-sonnet-5] [--effort medium]
+//   npm run eval [-- --only <id>] [--model claude-sonnet-5] [--effort high]
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import type { Effort } from "../src/llm/explain";
@@ -14,7 +14,7 @@ const { values } = parseArgs({
     cases: { type: "string", default: "eval/cases.json" },
     only: { type: "string" },
     model: { type: "string", default: "claude-opus-5" },
-    effort: { type: "string", default: "high" },
+    effort: { type: "string", default: "medium" },
   },
 });
 

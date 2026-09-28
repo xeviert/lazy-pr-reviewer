@@ -11,8 +11,8 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "dry-run": "tsx scripts/dry-run.ts",
-    "eval": "tsx scripts/eval.ts"
+    "dry-run": "tsx --env-file-if-exists=.env scripts/dry-run.ts",
+    "eval": "tsx --env-file-if-exists=.env scripts/eval.ts"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",

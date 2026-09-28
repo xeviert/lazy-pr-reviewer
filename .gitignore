@@ -3,3 +3,4 @@ eval/out/
 *.log
 eval/cases.json
 eval/expected/*.md
+*.env

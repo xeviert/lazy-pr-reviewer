@@ -16,7 +16,7 @@ inputs:
     default: claude-opus-5
   effort:
     description: "Model effort: low, medium, high, xhigh, or max."
-    default: high
+    default: medium
   max-tokens:
     description: Output token cap for the model call.
     default: "32000"

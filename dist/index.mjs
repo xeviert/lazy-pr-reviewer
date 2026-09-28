@@ -43358,7 +43358,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 // src/config.ts
 var EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 function readConfig() {
-  const effort = getInput("effort") || "high";
+  const effort = getInput("effort") || "medium";
   if (!EFFORTS.includes(effort)) throw new Error(`effort must be one of ${EFFORTS.join(", ")}; got "${effort}".`);
   return {
     apiKey: getInput("anthropic-api-key"),

@@ -15,7 +15,7 @@ export interface Config {
 }
 
 export function readConfig(): Config {
-  const effort = core.getInput("effort") || "high";
+  const effort = core.getInput("effort") || "medium";
   if (!EFFORTS.includes(effort as Effort)) throw new Error(`effort must be one of ${EFFORTS.join(", ")}; got "${effort}".`);
 
   return {

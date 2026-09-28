@@ -29,7 +29,7 @@ Expected result:
 ```sh
 npm run eval                        # all cases -> eval/out/<id>.md
 npm run eval -- --only rate-limit   # one case
-npm run eval -- --model claude-sonnet-5 --effort medium
+npm run eval -- --model claude-sonnet-5 --effort low
 ```
 
 Each run calls the model once per case and costs money. Compare `out/<id>.md` with `expected/<id>.md` and check:

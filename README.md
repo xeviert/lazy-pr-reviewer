@@ -58,7 +58,7 @@ It works on any language. Facts have the most rules for TypeScript and JavaScrip
 | `anthropic-api-key` | — | Empty means skip with a notice (fork and Dependabot PRs get no secrets) |
 | `github-token` | `github.token` | Needs `checks: write` |
 | `model` | `claude-opus-5` | `claude-sonnet-5` is cheaper |
-| `effort` | `high` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `effort` | `medium` | `low`, `medium`, `high`, `xhigh`, `max` |
 | `max-tokens` | `32000` | Output cap |
 | `max-diff-chars` | `300000` | About 85k input tokens. Files past the budget are listed as not explained |
 | `exclude` | — | Extra globs to skip, one per line |
@@ -83,4 +83,4 @@ npm run dry-run -- --repo ../my-app --base main --head my-branch --title "PR tit
 npm run dry-run -- --repo ../my-app --base main --head my-branch --title "PR title"   # calls the model
 ```
 
-`dry-run` and `eval` read credentials from `ANTHROPIC_API_KEY`. See [eval/README.md](eval/README.md) for the regression set.
+`dry-run` and `eval` read `ANTHROPIC_API_KEY` from the environment or a local `.env` file. See [eval/README.md](eval/README.md) for the regression set.

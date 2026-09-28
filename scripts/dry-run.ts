@@ -14,7 +14,7 @@ const { values } = parseArgs({
     "body-file": { type: "string" },
     pr: { type: "string" },
     model: { type: "string", default: "claude-opus-5" },
-    effort: { type: "string", default: "high" },
+    effort: { type: "string", default: "medium" },
     "max-tokens": { type: "string", default: "32000" },
     "prompt-only": { type: "boolean", default: false },
   },
