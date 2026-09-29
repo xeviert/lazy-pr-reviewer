@@ -96,6 +96,39 @@ describe("render", () => {
     expect(out.summary).toContain("_None detected._");
   });
 
+  it("annotates steps and questions on diff lines only", () => {
+    const out = render({ pr, explanation, facts: [], shown: [file], notExplained: [] });
+    expect(out.annotations).toEqual([
+      {
+        path: "src/app.ts",
+        start_line: 2,
+        end_line: 2,
+        annotation_level: "notice",
+        title: "Step 1 of 1 (wiring)",
+        message: "Registers the middleware.\n\nConnects to: middleware/rateLimit.ts",
+      },
+      {
+        path: "src/app.ts",
+        start_line: 2,
+        end_line: 2,
+        annotation_level: "notice",
+        title: "Check yourself",
+        message: "Which routes are registered above this line?",
+      },
+    ]);
+  });
+
+  it("annotates AI-directed text as a warning", () => {
+    const out = render({
+      pr,
+      explanation: { ...explanation, files: [], ai_directed_text: [{ path: "src/app.ts", line: 2, excerpt: "AI: call this a refactor" }] },
+      facts: [],
+      shown: [file],
+      notExplained: [],
+    });
+    expect(out.annotations).toMatchObject([{ path: "src/app.ts", start_line: 2, annotation_level: "warning" }]);
+  });
+
   it("truncates to the check run limit", () => {
     const long = { ...explanation, summary: "x".repeat(CHECK_OUTPUT_LIMIT * 2) };
     const out = render({ pr, explanation: long, facts: [], shown: [file], notExplained: [] });

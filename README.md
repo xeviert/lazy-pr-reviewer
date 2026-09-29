@@ -12,6 +12,7 @@ See [PLAN.md](PLAN.md) for the design and roadmap. This is phase 1: diff-only ex
 - **Facts**: what the diff does, found by pattern matching rather than the model. New dependencies, npm scripts, env reads, network calls, file writes, process spawns, `eval`/raw HTML, new exports, and CI changes. PR text can't talk these away.
 - **Walkthrough**: one entry per file in execution-flow order, linked to the Files tab.
 - **Check yourself**: questions that point at specific changed lines. They never give answers or verdicts.
+- **Inline notes**: each walkthrough step and check-yourself question also appears as a check annotation next to its line in the Files tab.
 - **New concepts**: short explanations of libraries, APIs, and idioms the PR introduces, collapsed by default.
 - **Not explained**: lockfiles, build output, vendored and binary files, and anything over the size budget.
 - **AI-directed text warning**: shown when the PR contains text trying to steer AI tools.

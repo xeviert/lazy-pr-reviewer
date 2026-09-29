@@ -1,4 +1,4 @@
-import { visibleHeadLines, type FileDiff } from "../analysis/diff";
+import { addedLines, visibleHeadLines, type FileDiff } from "../analysis/diff";
 import type { Fact } from "../analysis/facts";
 import type { Skipped } from "../analysis/filter";
 import type { Explanation } from "../llm/explain";
@@ -15,10 +15,21 @@ export interface RenderInput {
   notExplained: Skipped[];
 }
 
+/** Shown inline on the Files tab next to the line it points at. Plain text: GitHub doesn't render markdown here. */
+export interface Annotation {
+  path: string;
+  start_line: number;
+  end_line: number;
+  annotation_level: "notice" | "warning";
+  title: string;
+  message: string;
+}
+
 export interface CheckOutput {
   title: string;
   summary: string;
   text: string;
+  annotations?: Annotation[];
 }
 
 export function render(input: RenderInput): CheckOutput {
@@ -29,6 +40,10 @@ export function render(input: RenderInput): CheckOutput {
     if (!lines) return undefined;
     return diffLink(pr, path, line !== undefined && lines.has(line) ? line : undefined);
   };
+  const annotations: Annotation[] = [];
+  const annotate = (path: string, line: number, level: Annotation["annotation_level"], title: string, message: string) => {
+    if (visible.get(path)?.has(line)) annotations.push({ path, start_line: line, end_line: line, annotation_level: level, title, message });
+  };
 
   const summary: string[] = ["### What this PR does", explanation.summary, ""];
 
@@ -36,6 +51,7 @@ export function render(input: RenderInput): CheckOutput {
     summary.push("> [!WARNING]", "> This PR contains text addressed to AI tools. Read these lines yourself:");
     for (const t of explanation.ai_directed_text) {
       summary.push(`> - ${anchor(`${t.path}:${t.line}`, link(t.path, t.line))}: "${t.excerpt}"`);
+      annotate(t.path, t.line, "warning", "Text addressed to AI tools", `This text tries to steer AI tools. Read it yourself: "${t.excerpt}"`);
     }
     summary.push("");
   }
@@ -52,12 +68,19 @@ export function render(input: RenderInput): CheckOutput {
   );
 
   const text: string[] = ["## Walkthrough"];
+  const byPath = new Map(shown.map((f) => [f.path, f]));
   let dropped = 0;
   explanation.files.forEach((file, i) => {
     const href = link(file.path);
     const name = href ? `[${file.path}](${href})` : `${file.path} _(not in the diff)_`;
     text.push(`${i + 1}. **${name}** (${file.role})`, `   ${indent(file.explanation)}`);
     if (file.connects_to.length > 0) text.push(`   Connects to: ${file.connects_to.map(code).join(", ")}`);
+    const diff = byPath.get(file.path);
+    const first = diff && firstChangedLine(diff);
+    if (first !== undefined) {
+      const connects = file.connects_to.length > 0 ? `\n\nConnects to: ${file.connects_to.join(", ")}` : "";
+      annotate(file.path, first, "notice", `Step ${i + 1} of ${explanation.files.length} (${file.role})`, file.explanation + connects);
+    }
     for (const q of file.check_yourself) {
       const lines = visible.get(file.path);
       if (!lines?.has(q.line)) {
@@ -65,6 +88,7 @@ export function render(input: RenderInput): CheckOutput {
         continue;
       }
       text.push(`   > **Check yourself:** [line ${q.line}](${diffLink(pr, file.path, q.line)}): ${q.question}`);
+      annotate(file.path, q.line, "notice", "Check yourself", q.question);
     }
     text.push("");
   });
@@ -93,7 +117,16 @@ export function render(input: RenderInput): CheckOutput {
     title: `Explained ${shown.length} file(s), ${facts.length} fact(s)`,
     summary: limit(summary.join("\n")),
     text: limit(text.join("\n")),
+    annotations,
   };
+}
+
+/** Where a walkthrough step is pinned: the first added line, or the first visible line for deletion-only files. */
+function firstChangedLine(file: FileDiff): number | undefined {
+  const added = addedLines(file)[0]?.newLine;
+  if (added !== undefined) return added;
+  const visible = [...visibleHeadLines(file)];
+  return visible.length > 0 ? Math.min(...visible) : undefined;
 }
 
 function anchor(label: string, href: string | undefined): string {

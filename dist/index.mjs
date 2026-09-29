@@ -43391,15 +43391,15 @@ async function startCheck(octokit, target) {
   });
   return data.id;
 }
+var ANNOTATION_BATCH = 50;
 async function finishCheck(octokit, target, checkRunId, output2) {
-  await octokit.rest.checks.update({
-    owner: target.owner,
-    repo: target.repo,
-    check_run_id: checkRunId,
-    status: "completed",
-    conclusion: "neutral",
-    output: output2
-  });
+  const { annotations = [], ...rest } = output2;
+  const batches = [];
+  for (let i = 0; i < annotations.length; i += ANNOTATION_BATCH) batches.push(annotations.slice(i, i + ANNOTATION_BATCH));
+  const last = batches.pop();
+  const base = { owner: target.owner, repo: target.repo, check_run_id: checkRunId };
+  for (const batch of batches) await octokit.rest.checks.update({ ...base, output: { ...rest, annotations: batch } });
+  await octokit.rest.checks.update({ ...base, status: "completed", conclusion: "neutral", output: { ...rest, annotations: last } });
 }
 
 // src/analysis/diff.ts
@@ -43484,11 +43484,16 @@ function render(input2) {
     if (!lines) return void 0;
     return diffLink(pr, path4, line !== void 0 && lines.has(line) ? line : void 0);
   };
+  const annotations = [];
+  const annotate = (path4, line, level, title, message) => {
+    if (visible.get(path4)?.has(line)) annotations.push({ path: path4, start_line: line, end_line: line, annotation_level: level, title, message });
+  };
   const summary2 = ["### What this PR does", explanation.summary, ""];
   if (explanation.ai_directed_text.length > 0) {
     summary2.push("> [!WARNING]", "> This PR contains text addressed to AI tools. Read these lines yourself:");
     for (const t of explanation.ai_directed_text) {
       summary2.push(`> - ${anchor(`${t.path}:${t.line}`, link(t.path, t.line))}: "${t.excerpt}"`);
+      annotate(t.path, t.line, "warning", "Text addressed to AI tools", `This text tries to steer AI tools. Read it yourself: "${t.excerpt}"`);
     }
     summary2.push("");
   }
@@ -43503,12 +43508,21 @@ function render(input2) {
     "_Facts come from pattern matching on added lines and can miss things. The walkthrough is written by a model and can be wrong. Follow the links and read the code._"
   );
   const text = ["## Walkthrough"];
+  const byPath = new Map(shown.map((f) => [f.path, f]));
   let dropped = 0;
   explanation.files.forEach((file2, i) => {
     const href = link(file2.path);
     const name = href ? `[${file2.path}](${href})` : `${file2.path} _(not in the diff)_`;
     text.push(`${i + 1}. **${name}** (${file2.role})`, `   ${indent(file2.explanation)}`);
     if (file2.connects_to.length > 0) text.push(`   Connects to: ${file2.connects_to.map(code).join(", ")}`);
+    const diff = byPath.get(file2.path);
+    const first = diff && firstChangedLine(diff);
+    if (first !== void 0) {
+      const connects = file2.connects_to.length > 0 ? `
+
+Connects to: ${file2.connects_to.join(", ")}` : "";
+      annotate(file2.path, first, "notice", `Step ${i + 1} of ${explanation.files.length} (${file2.role})`, file2.explanation + connects);
+    }
     for (const q of file2.check_yourself) {
       const lines = visible.get(file2.path);
       if (!lines?.has(q.line)) {
@@ -43516,6 +43530,7 @@ function render(input2) {
         continue;
       }
       text.push(`   > **Check yourself:** [line ${q.line}](${diffLink(pr, file2.path, q.line)}): ${q.question}`);
+      annotate(file2.path, q.line, "notice", "Check yourself", q.question);
     }
     text.push("");
   });
@@ -43539,8 +43554,15 @@ function render(input2) {
   return {
     title: `Explained ${shown.length} file(s), ${facts.length} fact(s)`,
     summary: limit2(summary2.join("\n")),
-    text: limit2(text.join("\n"))
+    text: limit2(text.join("\n")),
+    annotations
   };
+}
+function firstChangedLine(file2) {
+  const added = addedLines(file2)[0]?.newLine;
+  if (added !== void 0) return added;
+  const visible = [...visibleHeadLines(file2)];
+  return visible.length > 0 ? Math.min(...visible) : void 0;
 }
 function anchor(label2, href) {
   return href ? `[${label2}](${href})` : label2;
