@@ -9,7 +9,7 @@ inputs:
     description: Anthropic API key. When empty (fork and Dependabot PRs), the action skips with a notice.
     required: false
   github-token:
-    description: Token used to create the check run. Needs `checks: write`.
+    description: "Token used to create the check run. Needs `checks: write`."
     default: ${{ github.token }}
   model:
     description: Claude model ID.
