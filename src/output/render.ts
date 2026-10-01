@@ -3,9 +3,13 @@ import type { Fact } from "../analysis/facts";
 import type { Skipped } from "../analysis/filter";
 import type { Explanation } from "../llm/explain";
 import { diffLink, type PrRef } from "./links";
+import { NOTE_MARKER } from "./prBody";
 
 /** GitHub rejects check run `output.summary` and `output.text` above this. */
 export const CHECK_OUTPUT_LIMIT = 65_535;
+
+/** PR bodies max out at 65,536 characters; leave room for the author's own text. */
+export const PR_SECTION_LIMIT = 60_000;
 
 export interface RenderInput {
   pr: PrRef;
@@ -13,9 +17,20 @@ export interface RenderInput {
   facts: Fact[];
   shown: FileDiff[];
   notExplained: Skipped[];
+  /** Check run page, linked from the PR body section. */
+  checkUrl?: string;
 }
 
-/** Shown inline on the Files tab next to the line it points at. Plain text: GitHub doesn't render markdown here. */
+/** A walkthrough step, question, or warning pinned to a changed line in the Files tab. */
+export interface Note {
+  path: string;
+  line: number;
+  level: "notice" | "warning";
+  title: string;
+  message: string;
+}
+
+/** Fallback for notes when review comments can't be posted. Plain text: GitHub doesn't render markdown here. */
 export interface Annotation {
   path: string;
   start_line: number;
@@ -32,7 +47,14 @@ export interface CheckOutput {
   annotations?: Annotation[];
 }
 
-export function render(input: RenderInput): CheckOutput {
+export interface RenderOutput {
+  check: CheckOutput;
+  notes: Note[];
+  /** Goes between the markers in the PR body. */
+  prSection: string;
+}
+
+export function render(input: RenderInput): RenderOutput {
   const { pr, explanation, facts, shown } = input;
   const visible = new Map(shown.map((f) => [f.path, visibleHeadLines(f)]));
   const link = (path: string, line?: number) => {
@@ -40,9 +62,9 @@ export function render(input: RenderInput): CheckOutput {
     if (!lines) return undefined;
     return diffLink(pr, path, line !== undefined && lines.has(line) ? line : undefined);
   };
-  const annotations: Annotation[] = [];
-  const annotate = (path: string, line: number, level: Annotation["annotation_level"], title: string, message: string) => {
-    if (visible.get(path)?.has(line)) annotations.push({ path, start_line: line, end_line: line, annotation_level: level, title, message });
+  const notes: Note[] = [];
+  const annotate = (path: string, line: number, level: Note["level"], title: string, message: string) => {
+    if (visible.get(path)?.has(line)) notes.push({ path, line, level, title, message });
   };
 
   const summary: string[] = ["### What this PR does", explanation.summary, ""];
@@ -113,12 +135,30 @@ export function render(input: RenderInput): CheckOutput {
     for (const s of input.notExplained) text.push(`- ${s.path} (${s.reason})`);
   }
 
+  const walkthrough = input.checkUrl ? `[Lazy PR Reviewer check](${input.checkUrl})` : "the Lazy PR Reviewer check";
+  const prSection = [
+    ...summary,
+    "",
+    `_The full walkthrough is in ${walkthrough}. Steps and check-yourself questions are also pinned to their lines in the Files tab._`,
+  ];
+
   return {
-    title: `Explained ${shown.length} file(s), ${facts.length} fact(s)`,
-    summary: limit(summary.join("\n")),
-    text: limit(text.join("\n")),
-    annotations,
+    check: {
+      title: `Explained ${shown.length} file(s), ${facts.length} fact(s)`,
+      summary: limit(summary.join("\n")),
+      text: limit(text.join("\n")),
+    },
+    notes,
+    prSection: limit(prSection.join("\n"), PR_SECTION_LIMIT),
   };
+}
+
+export function toAnnotations(notes: Note[]): Annotation[] {
+  return notes.map((n) => ({ path: n.path, start_line: n.line, end_line: n.line, annotation_level: n.level, title: n.title, message: n.message }));
+}
+
+export function toCommentBody(note: Note): string {
+  return `**${note.title}**\n\n${note.message}\n\n${NOTE_MARKER}`;
 }
 
 /** Where a walkthrough step is pinned: the first added line, or the first visible line for deletion-only files. */
@@ -141,8 +181,8 @@ function indent(text: string): string {
   return text.replace(/\n/g, "\n   ");
 }
 
-function limit(text: string): string {
-  if (text.length <= CHECK_OUTPUT_LIMIT) return text;
-  const note = "\n\n_Output truncated to fit GitHub's check run limit._";
-  return text.slice(0, CHECK_OUTPUT_LIMIT - note.length) + note;
+function limit(text: string, max = CHECK_OUTPUT_LIMIT): string {
+  if (text.length <= max) return text;
+  const note = "\n\n_Output truncated to fit GitHub's size limit._";
+  return text.slice(0, max - note.length) + note;
 }

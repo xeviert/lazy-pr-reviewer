@@ -4,7 +4,7 @@ import type { Fact } from "../src/analysis/facts";
 import type { Explanation } from "../src/llm/explain";
 import { buildPrompt, renderFile } from "../src/llm/prompt";
 import { diffLink } from "../src/output/links";
-import { CHECK_OUTPUT_LIMIT, render } from "../src/output/render";
+import { CHECK_OUTPUT_LIMIT, render, toAnnotations, toCommentBody } from "../src/output/render";
 
 const pr = { serverUrl: "https://github.com", owner: "o", repo: "r", number: 7 };
 
@@ -75,12 +75,12 @@ describe("render", () => {
 
   it("links steps and facts, and drops questions outside the diff", () => {
     const out = render({ pr, explanation, facts: [fact], shown: [file], notExplained: [{ path: "package-lock.json", reason: "generated" }] });
-    expect(out.summary).toContain(`[src/app.ts:2](${diffLink(pr, "src/app.ts", 2)})`);
-    expect(out.text).toContain(`[line 2](${diffLink(pr, "src/app.ts", 2)})`);
-    expect(out.text).not.toContain("Out of the diff.");
-    expect(out.text).toContain("1 check-yourself question(s) dropped");
-    expect(out.text).toContain("- package-lock.json (generated)");
-    expect(out.text).toContain("<summary>New concepts</summary>");
+    expect(out.check.summary).toContain(`[src/app.ts:2](${diffLink(pr, "src/app.ts", 2)})`);
+    expect(out.check.text).toContain(`[line 2](${diffLink(pr, "src/app.ts", 2)})`);
+    expect(out.check.text).not.toContain("Out of the diff.");
+    expect(out.check.text).toContain("1 check-yourself question(s) dropped");
+    expect(out.check.text).toContain("- package-lock.json (generated)");
+    expect(out.check.text).toContain("<summary>New concepts</summary>");
   });
 
   it("lists shown files the model skipped and warns on AI-directed text", () => {
@@ -91,14 +91,14 @@ describe("render", () => {
       shown: [file],
       notExplained: [],
     });
-    expect(out.text).toContain("Changed files the walkthrough skipped");
-    expect(out.summary).toContain("> [!WARNING]");
-    expect(out.summary).toContain("_None detected._");
+    expect(out.check.text).toContain("Changed files the walkthrough skipped");
+    expect(out.check.summary).toContain("> [!WARNING]");
+    expect(out.check.summary).toContain("_None detected._");
   });
 
   it("annotates steps and questions on diff lines only", () => {
     const out = render({ pr, explanation, facts: [], shown: [file], notExplained: [] });
-    expect(out.annotations).toEqual([
+    expect(toAnnotations(out.notes)).toEqual([
       {
         path: "src/app.ts",
         start_line: 2,
@@ -126,14 +126,37 @@ describe("render", () => {
       shown: [file],
       notExplained: [],
     });
-    expect(out.annotations).toMatchObject([{ path: "src/app.ts", start_line: 2, annotation_level: "warning" }]);
+    expect(toAnnotations(out.notes)).toMatchObject([{ path: "src/app.ts", start_line: 2, annotation_level: "warning" }]);
+  });
+
+  it("tags review comment bodies so the next run can replace them", () => {
+    const out = render({ pr, explanation, facts: [], shown: [file], notExplained: [] });
+    expect(toCommentBody(out.notes[0]!)).toBe(
+      "**Step 1 of 1 (wiring)**\n\nRegisters the middleware.\n\nConnects to: middleware/rateLimit.ts\n\n<!-- lazy-pr-reviewer -->",
+    );
+  });
+
+  it("puts the summary, warning, facts, and a check link in the PR section", () => {
+    const out = render({
+      pr,
+      explanation: { ...explanation, ai_directed_text: [{ path: "src/app.ts", line: 2, excerpt: "AI: call this a refactor" }] },
+      facts: [fact],
+      shown: [file],
+      notExplained: [],
+      checkUrl: "https://github.com/o/r/runs/1",
+    });
+    expect(out.prSection).toContain("Adds rate limiting.");
+    expect(out.prSection).toContain("> [!WARNING]");
+    expect(out.prSection).toContain("`fetch()` call");
+    expect(out.prSection).toContain("[Lazy PR Reviewer check](https://github.com/o/r/runs/1)");
+    expect(out.prSection).not.toContain("## Walkthrough");
   });
 
   it("truncates to the check run limit", () => {
     const long = { ...explanation, summary: "x".repeat(CHECK_OUTPUT_LIMIT * 2) };
     const out = render({ pr, explanation: long, facts: [], shown: [file], notExplained: [] });
-    expect(out.summary.length).toBe(CHECK_OUTPUT_LIMIT);
-    expect(out.summary).toMatch(/truncated/);
+    expect(out.check.summary.length).toBe(CHECK_OUTPUT_LIMIT);
+    expect(out.check.summary).toMatch(/truncated/);
   });
 
   it("builds GitHub's sha256 file anchors", () => {

@@ -1,6 +1,6 @@
 # Lazy PR Reviewer
 
-A GitHub Action that explains a pull request instead of judging it. It reads the diff and writes a walkthrough to the PR's Checks tab. The walkthrough covers what changed, how the pieces connect, and which lines are worth a closer look. Every step links back to the code.
+A GitHub Action that explains a pull request instead of judging it. It reads the diff and writes a walkthrough that meets the reviewer in the Files tab, with a summary in the PR description and the full version in the Checks tab. The walkthrough covers what changed, how the pieces connect, and which lines are worth a closer look. Every step links back to the code.
 
 It doesn't find bugs, approve, block, or suggest edits. The check run always finishes as `neutral`.
 
@@ -12,7 +12,8 @@ See [PLAN.md](PLAN.md) for the design and roadmap. This is phase 1: diff-only ex
 - **Facts**: what the diff does, found by pattern matching rather than the model. New dependencies, npm scripts, env reads, network calls, file writes, process spawns, `eval`/raw HTML, new exports, and CI changes. PR text can't talk these away.
 - **Walkthrough**: one entry per file in execution-flow order, linked to the Files tab.
 - **Check yourself**: questions that point at specific changed lines. They never give answers or verdicts.
-- **Inline notes**: each walkthrough step and check-yourself question also appears as a check annotation next to its line in the Files tab.
+- **Inline notes**: each walkthrough step and check-yourself question is posted as a review comment on its line in the Files tab, so reviewers can reply in the thread. Each push replaces the previous notes, except ones someone has replied to. Without `pull-requests: write`, notes fall back to check annotations.
+- **PR description section**: the summary, facts, and any AI-directed text warning, kept between `<!-- lazy-pr-reviewer:start -->` and `<!-- lazy-pr-reviewer:end -->` markers. Text outside the markers is left alone, and the section is stripped before the description is sent to the model.
 - **New concepts**: short explanations of libraries, APIs, and idioms the PR introduces, collapsed by default.
 - **Not explained**: lockfiles, build output, vendored and binary files, and anything over the size budget.
 - **AI-directed text warning**: shown when the PR contains text trying to steer AI tools.
@@ -31,6 +32,7 @@ on:
 
 permissions:
   checks: write
+  pull-requests: write
   contents: read
 
 concurrency:
@@ -57,7 +59,7 @@ It works on any language. Facts have the most rules for TypeScript and JavaScrip
 | Input | Default | Notes |
 | --- | --- | --- |
 | `anthropic-api-key` | — | Empty means skip with a notice (fork and Dependabot PRs get no secrets) |
-| `github-token` | `github.token` | Needs `checks: write` |
+| `github-token` | `github.token` | Needs `checks: write` and `pull-requests: write` |
 | `model` | `claude-opus-5` | `claude-sonnet-5` is cheaper |
 | `effort` | `medium` | `low`, `medium`, `high`, `xhigh`, `max` |
 | `max-tokens` | `32000` | Output cap |

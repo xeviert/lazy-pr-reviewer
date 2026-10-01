@@ -199,7 +199,7 @@ Phase 1 proves the explanations are useful before any investment in parsing or h
 | --- | --- | --- |
 | 1. MVP Action | Action on PR events, diff-only explanation, regex facts, line links, check-yourself questions, new concepts, Checks tab output | Regression set: explanations match ground truth, and the planted-injection PR doesn't change the facts or fool the narrative |
 | 2. Context | tree-sitter parsing, relationship map, flow-ordered units, AST facts, coverage check | Walkthrough order matches real flow on the regression set |
-| 3. Polish | Mermaid flow diagram, PR body summary, Files tab notes, cache on re-push | Stable output across pushes, no stacked comments |
+| 3. Polish | Mermaid flow diagram, cache on re-push. PR body summary and Files tab notes were built early, after phase 1, because Checks-tab-only output got skimmed | Stable output across pushes, no stacked comments |
 | 4. GitHub App | Webhook server, multi-repo installs, per-repo config file, fork PR support | — |
 
 ### Phase 1 tasks
