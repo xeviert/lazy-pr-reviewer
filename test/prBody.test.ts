@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SECTION_END, SECTION_START, spliceSection, stripSection } from "../src/output/prBody";
+import { SECTION_END, SECTION_START, extractSection, spliceSection, stripSection } from "../src/output/prBody";
 
 const block = (section: string) => `${SECTION_START}\n${section}\n${SECTION_END}`;
 
@@ -32,5 +32,12 @@ describe("stripSection", () => {
 
   it("leaves bodies without a section unchanged", () => {
     expect(stripSection("  Author text.\n")).toBe("  Author text.\n");
+  });
+});
+
+describe("extractSection", () => {
+  it("returns the section without markers, or undefined when there is none", () => {
+    expect(extractSection(spliceSection("Author text.", "ours"))).toBe("ours");
+    expect(extractSection("Author text.")).toBeUndefined();
   });
 });

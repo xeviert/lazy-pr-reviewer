@@ -18,6 +18,11 @@ export function stripSection(body: string): string {
   return range ? (body.slice(0, range.start) + body.slice(range.end)).trim() : body;
 }
 
+export function extractSection(body: string): string | undefined {
+  const range = findSection(body);
+  return range ? body.slice(range.start + SECTION_START.length, range.end - SECTION_END.length).trim() : undefined;
+}
+
 function findSection(body: string): { start: number; end: number } | undefined {
   const start = body.indexOf(SECTION_START);
   if (start === -1) return undefined;
