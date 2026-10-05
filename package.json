@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dry-run": "tsx --env-file-if-exists=.env scripts/dry-run.ts",
-    "eval": "tsx --env-file-if-exists=.env scripts/eval.ts"
+    "eval": "tsx --env-file-if-exists=.env scripts/eval.ts",
+    "snapshot": "tsx --env-file-if-exists=.env scripts/snapshot.ts"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",

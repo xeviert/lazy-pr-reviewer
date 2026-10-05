@@ -39186,6 +39186,9 @@ function setFailed(message) {
 function error(message, properties = {}) {
   issueCommand("error", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+function warning(message, properties = {}) {
+  issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+}
 function notice(message, properties = {}) {
   issueCommand("notice", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
@@ -43379,27 +43382,30 @@ function positiveInt(name, fallback) {
   return value;
 }
 
-// src/github/publish.ts
-var CHECK_NAME = "Lazy PR Reviewer";
-async function startCheck(octokit, target) {
-  const { data } = await octokit.rest.checks.create({
-    owner: target.owner,
-    repo: target.repo,
-    name: CHECK_NAME,
-    head_sha: target.headSha,
-    status: "in_progress"
-  });
-  return data.id;
+// src/output/prBody.ts
+var SECTION_START = "<!-- lazy-pr-reviewer:start -->";
+var SECTION_END = "<!-- lazy-pr-reviewer:end -->";
+var NOTE_MARKER = "<!-- lazy-pr-reviewer -->";
+function spliceSection(body, section) {
+  const block = `${SECTION_START}
+${section}
+${SECTION_END}`;
+  const range = findSection(body);
+  if (!range) return body.trim() ? `${body.trimEnd()}
+
+${block}` : block;
+  return body.slice(0, range.start) + block + body.slice(range.end);
 }
-var ANNOTATION_BATCH = 50;
-async function finishCheck(octokit, target, checkRunId, output2) {
-  const { annotations = [], ...rest } = output2;
-  const batches = [];
-  for (let i = 0; i < annotations.length; i += ANNOTATION_BATCH) batches.push(annotations.slice(i, i + ANNOTATION_BATCH));
-  const last = batches.pop();
-  const base = { owner: target.owner, repo: target.repo, check_run_id: checkRunId };
-  for (const batch of batches) await octokit.rest.checks.update({ ...base, output: { ...rest, annotations: batch } });
-  await octokit.rest.checks.update({ ...base, status: "completed", conclusion: "neutral", output: { ...rest, annotations: last } });
+function stripSection(body) {
+  const range = findSection(body);
+  return range ? (body.slice(0, range.start) + body.slice(range.end)).trim() : body;
+}
+function findSection(body) {
+  const start = body.indexOf(SECTION_START);
+  if (start === -1) return void 0;
+  const end = body.indexOf(SECTION_END, start);
+  if (end === -1) return void 0;
+  return { start, end: end + SECTION_END.length };
 }
 
 // src/analysis/diff.ts
@@ -43476,6 +43482,7 @@ function diffLink(pr, path4, line) {
 
 // src/output/render.ts
 var CHECK_OUTPUT_LIMIT = 65535;
+var PR_SECTION_LIMIT = 6e4;
 function render(input2) {
   const { pr, explanation, facts, shown } = input2;
   const visible = new Map(shown.map((f) => [f.path, visibleHeadLines(f)]));
@@ -43484,9 +43491,9 @@ function render(input2) {
     if (!lines) return void 0;
     return diffLink(pr, path4, line !== void 0 && lines.has(line) ? line : void 0);
   };
-  const annotations = [];
+  const notes = [];
   const annotate = (path4, line, level, title, message) => {
-    if (visible.get(path4)?.has(line)) annotations.push({ path: path4, start_line: line, end_line: line, annotation_level: level, title, message });
+    if (visible.get(path4)?.has(line)) notes.push({ path: path4, line, level, title, message });
   };
   const summary2 = ["### What this PR does", explanation.summary, ""];
   if (explanation.ai_directed_text.length > 0) {
@@ -43551,12 +43558,31 @@ Connects to: ${file2.connects_to.join(", ")}` : "";
     text.push("## Not explained");
     for (const s of input2.notExplained) text.push(`- ${s.path} (${s.reason})`);
   }
+  const walkthrough = input2.checkUrl ? `[Lazy PR Reviewer check](${input2.checkUrl})` : "the Lazy PR Reviewer check";
+  const prSection = [
+    ...summary2,
+    "",
+    `_The full walkthrough is in ${walkthrough}. Steps and check-yourself questions are also pinned to their lines in the Files tab._`
+  ];
   return {
-    title: `Explained ${shown.length} file(s), ${facts.length} fact(s)`,
-    summary: limit2(summary2.join("\n")),
-    text: limit2(text.join("\n")),
-    annotations
+    check: {
+      title: `Explained ${shown.length} file(s), ${facts.length} fact(s)`,
+      summary: limit2(summary2.join("\n")),
+      text: limit2(text.join("\n"))
+    },
+    notes,
+    prSection: limit2(prSection.join("\n"), PR_SECTION_LIMIT)
   };
+}
+function toAnnotations(notes) {
+  return notes.map((n) => ({ path: n.path, start_line: n.line, end_line: n.line, annotation_level: n.level, title: n.title, message: n.message }));
+}
+function toCommentBody(note) {
+  return `**${note.title}**
+
+${note.message}
+
+${NOTE_MARKER}`;
 }
 function firstChangedLine(file2) {
   const added = addedLines(file2)[0]?.newLine;
@@ -43573,10 +43599,63 @@ function code(name) {
 function indent(text) {
   return text.replace(/\n/g, "\n   ");
 }
-function limit2(text) {
-  if (text.length <= CHECK_OUTPUT_LIMIT) return text;
-  const note = "\n\n_Output truncated to fit GitHub's check run limit._";
-  return text.slice(0, CHECK_OUTPUT_LIMIT - note.length) + note;
+function limit2(text, max = CHECK_OUTPUT_LIMIT) {
+  if (text.length <= max) return text;
+  const note = "\n\n_Output truncated to fit GitHub's size limit._";
+  return text.slice(0, max - note.length) + note;
+}
+
+// src/github/publish.ts
+var CHECK_NAME = "Lazy PR Reviewer";
+async function startCheck(octokit, target) {
+  const { data } = await octokit.rest.checks.create({
+    owner: target.owner,
+    repo: target.repo,
+    name: CHECK_NAME,
+    head_sha: target.headSha,
+    status: "in_progress"
+  });
+  return { id: data.id, url: data.html_url ?? "" };
+}
+var ANNOTATION_BATCH = 50;
+async function finishCheck(octokit, target, checkRunId, output2) {
+  const { annotations = [], ...rest } = output2;
+  const batches = [];
+  for (let i = 0; i < annotations.length; i += ANNOTATION_BATCH) batches.push(annotations.slice(i, i + ANNOTATION_BATCH));
+  const last = batches.pop();
+  const base = { owner: target.owner, repo: target.repo, check_run_id: checkRunId };
+  for (const batch of batches) await octokit.rest.checks.update({ ...base, output: { ...rest, annotations: batch } });
+  await octokit.rest.checks.update({ ...base, status: "completed", conclusion: "neutral", output: { ...rest, annotations: last } });
+}
+async function publishNotes(octokit, target, notes) {
+  const pull = { owner: target.owner, repo: target.repo, pull_number: target.number };
+  let reviewId;
+  if (notes.length > 0) {
+    const { data } = await octokit.rest.pulls.createReview({
+      ...pull,
+      commit_id: target.headSha,
+      event: "COMMENT",
+      comments: notes.map((n) => ({ path: n.path, line: n.line, side: "RIGHT", body: toCommentBody(n) }))
+    });
+    reviewId = data.id;
+  }
+  try {
+    const comments = await octokit.paginate(octokit.rest.pulls.listReviewComments, { ...pull, per_page: 100 });
+    const replied = new Set(comments.map((c) => c.in_reply_to_id).filter((id) => id !== void 0));
+    const stale = comments.filter(
+      (c) => c.user?.type === "Bot" && c.body.includes(NOTE_MARKER) && c.pull_request_review_id !== reviewId && !replied.has(c.id)
+    );
+    for (const c of stale) await octokit.rest.pulls.deleteReviewComment({ owner: target.owner, repo: target.repo, comment_id: c.id });
+  } catch (error63) {
+    warning(`Couldn't remove notes from earlier runs: ${error63 instanceof Error ? error63.message : String(error63)}`);
+  }
+}
+async function updatePrBody(octokit, target, section) {
+  const pull = { owner: target.owner, repo: target.repo, pull_number: target.number };
+  const { data } = await octokit.rest.pulls.get(pull);
+  const before = data.body ?? "";
+  const after = spliceSection(before, section);
+  if (after !== before) await octokit.rest.pulls.update({ ...pull, body: after });
 }
 
 // node_modules/@anthropic-ai/sdk/helpers/beta/zod.mjs
@@ -63704,20 +63783,21 @@ async function run() {
     return;
   }
   const octokit = getOctokit(config2.githubToken);
-  const target = { owner, repo, headSha: pr.head.sha };
-  const checkRunId = await startCheck(octokit, target);
+  const target = { owner, repo, headSha: pr.head.sha, number: pr.number };
+  const check2 = await startCheck(octokit, target);
   try {
     const prepared = prepare({
       cwd: config2.workingDirectory,
       baseSha: pr.base.sha,
       headSha: pr.head.sha,
       title: pr.title ?? "",
-      body: pr.body ?? "",
+      body: stripSection(pr.body ?? ""),
       exclude: config2.exclude,
       maxDiffChars: config2.maxDiffChars
     });
     if (prepared.prompt.shown.length === 0) {
-      await finishCheck(octokit, target, checkRunId, {
+      await publishInline(octokit, target, [], "### What this PR does\n_Nothing to explain: no changed file could be explained._");
+      await finishCheck(octokit, target, check2.id, {
         title: "Nothing to explain",
         summary: "No changed file could be explained. Reasons are listed below.",
         text: prepared.prompt.notExplained.map((s) => `- ${s.path} (${s.reason})`).join("\n")
@@ -63731,13 +63811,33 @@ async function run() {
       explanation,
       facts: prepared.facts,
       shown: prepared.prompt.shown,
-      notExplained: prepared.prompt.notExplained
+      notExplained: prepared.prompt.notExplained,
+      checkUrl: check2.url
     });
-    await finishCheck(octokit, target, checkRunId, output2);
+    const annotations = await publishInline(octokit, target, output2.notes, output2.prSection);
+    await finishCheck(octokit, target, check2.id, { ...output2.check, annotations });
   } catch (error63) {
     const message = error63 instanceof Error ? error63.message : String(error63);
-    await finishCheck(octokit, target, checkRunId, { title: "Explanation failed", summary: message, text: "" });
+    await finishCheck(octokit, target, check2.id, { title: "Explanation failed", summary: message, text: "" });
     setFailed(message);
   }
+}
+async function publishInline(octokit, target, notes, prSection) {
+  let fallback;
+  try {
+    await publishNotes(octokit, target, notes);
+  } catch (error63) {
+    warning(`Couldn't post review comments, using check annotations instead. Does the workflow grant \`pull-requests: write\`? ${describe3(error63)}`);
+    fallback = toAnnotations(notes);
+  }
+  try {
+    await updatePrBody(octokit, target, prSection);
+  } catch (error63) {
+    warning(`Couldn't update the PR description. ${describe3(error63)}`);
+  }
+  return fallback;
+}
+function describe3(error63) {
+  return error63 instanceof Error ? error63.message : String(error63);
 }
 await run().catch((error63) => setFailed(error63 instanceof Error ? error63.message : String(error63)));

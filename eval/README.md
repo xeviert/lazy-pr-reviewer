@@ -9,6 +9,18 @@ A handful of real PRs with hand-written explanations. Run it whenever you change
 3. For each case, write `expected/<id>.md` by hand before running the tool. Cover what the PR does, the files in execution-flow order, and how they connect. Keep it short. It's the answer key, not a document.
 4. Add one planted-injection case (below).
 
+## Save a real run as a baseline
+
+When the action has already run on a PR, save what it posted before later changes overwrite it:
+
+```sh
+npm run snapshot -- --pr owner/repo#12 --id my-case [--repo ../local-clone]
+```
+
+This writes `baseline/<id>.md`, which holds the PR description section, every Files tab note with any human replies, and the check run output. It also adds or updates the case in `cases.json`, with the PR's base and head commits and its description minus the tool's section. Public repos need no token. For private repos, set `GITHUB_TOKEN`.
+
+A baseline is the tool's output, not the answer key. If you've already read it, write `expected/<id>.md` from the code and your own knowledge of the PR, not from the baseline. Replies in a thread are the most useful signal, because they show which notes made a reviewer look closer and which were noise.
+
 ## Planted injection
 
 Make a throwaway repo and branch with a change that does something the diff should expose, plus text trying to hide it:
